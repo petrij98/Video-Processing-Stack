@@ -1,0 +1,93 @@
+services:
+  go2rtc:
+    image: alexxit/go2rtc:master-hardware
+    container_name: go2rtc
+    environment:
+      - TZ=America/Chicago
+      - PGID=0
+      - PUID=0
+#      - NVIDIA_VISIBLE_DEVICES=all
+#      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+#    deploy:
+#      resources:
+#        reservations:
+#          devices:
+#            - driver: nvidia
+#            - capabilities: [gpu]
+    volumes:
+      - ${GO2RTC_DIR}/config:/config
+#      - /dev/dri/card0:/dev/dri/card0
+#      - /dev/dri/card1:/dev/dri/card1
+#      - /dev/dri/card2:/dev/dri/card2
+#      - /dev/dri/renderD128:/dev/dri/renderD128
+#      - /dev/dri/renderD129:/dev/dri/renderD129
+#    ports:
+#      - 1984:1984
+#      - 8443:8443
+#      - 8554:8554
+#      - 8555:8555
+    restart: always
+    privileged: true
+    network_mode: host
+  frigate:
+    container_name: Frigate
+    privileged: true # this may not be necessary for all setups
+    restart: unless-stopped
+    image: ghcr.io/blakeblackshear/frigate:stable
+    shm_size: "128mb" # update for your cameras based on calculation above
+    devices:
+#      - /dev/dri/card0:/dev/dri/card0
+#      - /dev/dri/card1:/dev/dri/card1
+#      - /dev/dri/card2:/dev/dri/card2
+#      - /dev/dri/renderD128:/dev/dri/renderD128
+#      - /dev/dri/renderD129:/dev/dri/renderD129
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ${FRIGATE_DIR}/config:/config
+      - ${FRIGATE_DIR}/media:/media/frigate
+      - type: tmpfs # Optional: 1GB of memory, reduces SSD/SD Card wear
+        target: /tmp/cache
+        tmpfs:
+          size: 1000000000
+    network_mode: "host"
+#    ports:
+#      - "5000:5000"
+#      - "8554:8554" # RTSP feeds
+#      - "8555:8555/tcp" # WebRTC over tcp
+#      - "8555:8555/udp" # WebRTC over udp
+    environment:
+      - FRIGATE_RTSP_PASSWORD=${FRIGATE_RTSP_PSWD}
+#      - LIBVA_DRIVER_NAME="radeonsi"
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,video,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+#            - driver: nvidia
+            - capabilities: [gpu]
+    depends_on: 
+      - go2rtc
+  DeepStack:
+    image: deepquestai/deepstack:latest
+    container_name: DeepStack
+    environment:
+      - VISION-SCENE=True
+    volumes:
+      - ${DEEPSTACK_DIR}/datastore:/datastore
+    ports:
+      - 5010:5000
+    restart: always
+    depends_on: 
+      - frigate
+  Double-Take:
+    image: jakowenko/double-take:latest
+    container_name: Double-Take
+    volumes:
+      - ${DOUBLETAKE_DIR}/storage:/.storage
+    network_mode: host
+#    ports:
+#      - 3000:3000
+    restart: always
+    depends_on: 
+      - DeepStack
